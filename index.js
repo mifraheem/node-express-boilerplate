@@ -1,64 +1,70 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require('cors');
-const rateLimit = require("express-rate-limit");
+const helmet = require('helmet'); // Security middleware
+const limiter = require("./middlewares/rateLimiter");
+const logger = require("./middlewares/logger");
+const errorHandler = require("./middlewares/errorHandler");
+const PORT = process.env.PORT || 3000;
+// Dynamic route loading
+const testRoutes = require("./routes/test.routes");
+const { responseFormatter } = require("./middlewares/responseHandler");
 
-const PORT = process.env.PORT;
 const app = express();
 
-
-// Rate limiting middleware
-const limiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 60, // Limit each IP to 100 requests per minute
-  message: { error: "Too many requests, please try again later." },
-  headers: true, // Send rate limit info in response headers
-});
+// Security middleware for setting HTTP headers
+app.use(helmet());
 
 // Middleware
-app.use(cors());
+app.use(cors()); 
 app.use(express.json());
-app.use(limiter); // Apply rate limiting to all routes
+app.use(limiter);
+app.use(logger);
+app.use(responseFormatter);
+
 
 // Routes
-const routes = [
-  './routes/test.routes',
+app.use('/api/',testRoutes)
 
-];
 
-routes.forEach(route => {
-  const routeModule = require(route);
-  app.use(routeModule);
-});
 
+
+
+// Base route for health checks
 app.get('/', (req, res) => {
-  res.json({ message: 'Hello world' });
-});
-
-// Error Handling
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(err.statusCode || 500).json({
-    message: err.message || "Internal Server Error",
-  });
-});
-
-// Server Setup
-let server = null;
-
-
-server = app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+  return res.response(null, 200, 'Service is running & healthy');
 });
 
 
-// Graceful Shutdown
+// error handler middleware (after all other)
+app.use(errorHandler);
+
+// Server setup and start
+
+const server = app.listen(PORT, async () => {
+  console.log(`Server running on port ${PORT}`);
+
+});
+
+
+// Graceful shutdown
 const shutdown = () => {
   console.log('Shutting down server...');
   server.close(() => {
+    console.log('Server gracefully shut down.');
     process.exit(0);
   });
+
+  // Force close server after 10 seconds
+  setTimeout(() => {
+    console.error('Forced server shutdown.');
+    process.exit(1);
+  }, 10000);
 };
 
+// Handle kill signals
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+
+// Export app for testing purposes
+module.exports = app;

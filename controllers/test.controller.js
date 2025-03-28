@@ -1,9 +1,7 @@
 
 
-
-
 const testController = async(req, res) =>{
-  return res.status(200).json({message: "Test controller"});
+  return res.response(null, 200, "Test controller", );
 }
 
 
